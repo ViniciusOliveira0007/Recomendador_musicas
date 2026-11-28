@@ -1,33 +1,8 @@
 import { useState } from 'react'
 import './App.css'
+import { recomendarPorTexto } from './api'
 
-// ------------------------------------------------------------
-// DADOS DE EXEMPLO (mock)
-// Depois você troca isso por dados vindos de uma API ou do seu
-// modelo de recomendação em Python (ver comentário em App()).
-// ------------------------------------------------------------
-const MUSICAS = [
-  { id: 1, titulo: 'Here Comes the Sun', artista: 'The Beatles', genero: 'Rock', humor: 'Feliz', capa: '🌞' },
-  { id: 2, titulo: 'Happy', artista: 'Pharrell Williams', genero: 'Pop', humor: 'Feliz', capa: '😄' },
-  { id: 3, titulo: 'Garota de Ipanema', artista: 'Tom Jobim', genero: 'Bossa Nova', humor: 'Calmo', capa: '🌴' },
-  { id: 4, titulo: 'Clair de Lune', artista: 'Debussy', genero: 'Clássica', humor: 'Calmo', capa: '🌙' },
-  { id: 5, titulo: 'Eye of the Tiger', artista: 'Survivor', genero: 'Rock', humor: 'Energético', capa: '🔥' },
-  { id: 6, titulo: 'Titanium', artista: 'David Guetta', genero: 'Eletrônica', humor: 'Energético', capa: '⚡' },
-  { id: 7, titulo: 'Someone Like You', artista: 'Adele', genero: 'Pop', humor: 'Triste', capa: '🌧️' },
-  { id: 8, titulo: 'Hurt', artista: 'Johnny Cash', genero: 'Country', humor: 'Triste', capa: '🥀' },
-  { id: 9, titulo: 'Weightless', artista: 'Marconi Union', genero: 'Ambiente', humor: 'Foco', capa: '🎧' },
-  { id: 10, titulo: 'Experience', artista: 'Ludovico Einaudi', genero: 'Clássica', humor: 'Foco', capa: '🎹' },
-  { id: 11, titulo: 'Águas de Março', artista: 'Elis Regina', genero: 'MPB', humor: 'Calmo', capa: '🌊' },
-  { id: 12, titulo: 'Sweet Child O\' Mine', artista: 'Guns N\' Roses', genero: 'Rock', humor: 'Energético', capa: '🎸' },
-]
-
-const HUMORES = ['Todos', 'Feliz', 'Calmo', 'Energético', 'Triste', 'Foco']
-
-// ------------------------------------------------------------
-// COMPONENTES
-// Um componente React é só uma função que devolve "HTML" (JSX).
-// O nome SEMPRE começa com letra maiúscula.
-// ------------------------------------------------------------
+const HUMORES = ['Todos', 'Animado', 'Alegre', 'Intenso', 'Calmo']
 
 function Cabecalho() {
   return (
@@ -42,20 +17,23 @@ function Cabecalho() {
   )
 }
 
-// "props" são os dados que o componente pai passa para o filho,
-// parecido com os argumentos de uma função em Python.
-function Busca({ texto, setTexto, humor, setHumor }) {
+function Busca({ texto, setTexto, aoBuscar, carregando, humor, setHumor }) {
   return (
     <section id="busca" className="busca">
       <h2>O que você quer ouvir hoje?</h2>
-      <p>Digite um artista, música ou gênero e escolha seu humor.</p>
+      <p>Descreva o tipo de música que procura (funciona melhor em inglês).</p>
 
       <input
         type="text"
-        placeholder="Ex.: Beatles, rock, bossa nova..."
+        placeholder="Ex.: energetic dance music, calm acoustic songs..."
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && aoBuscar()}
       />
+
+      <button className="chip ativo" onClick={aoBuscar} disabled={carregando}>
+        {carregando ? 'Buscando...' : 'Buscar'}
+      </button>
 
       <div className="chips">
         {HUMORES.map((h) => (
@@ -84,7 +62,7 @@ function CardMusica({ musica, favorita, onFavoritar }) {
       </div>
       <button
         className={favorita ? 'favoritar ativo' : 'favoritar'}
-        onClick={() => onFavoritar(musica.id)}
+        onClick={() => onFavoritar(musica)}
       >
         {favorita ? '♥ Favorita' : '♡ Favoritar'}
       </button>
@@ -92,25 +70,35 @@ function CardMusica({ musica, favorita, onFavoritar }) {
   )
 }
 
-function Recomendacoes({ musicas, favoritas, onFavoritar }) {
+function Recomendacoes({ musicas, idsFavoritas, onFavoritar, carregando, erro, jaBuscou }) {
+  let conteudo
+  if (carregando) {
+    conteudo = <p className="vazio">Buscando recomendações...</p>
+  } else if (erro) {
+    conteudo = <p className="vazio">{erro}</p>
+  } else if (!jaBuscou) {
+    conteudo = <p className="vazio">Digite algo e clique em Buscar.</p>
+  } else if (musicas.length === 0) {
+    conteudo = <p className="vazio">Nenhuma música encontrada. Tente outra busca.</p>
+  } else {
+    conteudo = (
+      <div className="grade">
+        {musicas.map((m) => (
+          <CardMusica
+            key={m.id}
+            musica={m}
+            favorita={idsFavoritas.includes(m.id)}
+            onFavoritar={onFavoritar}
+          />
+        ))}
+      </div>
+    )
+  }
+
   return (
     <section id="recomendacoes">
       <h2>Recomendações para você</h2>
-
-      {musicas.length === 0 ? (
-        <p className="vazio">Nenhuma música encontrada. Tente outra busca.</p>
-      ) : (
-        <div className="grade">
-          {musicas.map((m) => (
-            <CardMusica
-              key={m.id}
-              musica={m}
-              favorita={favoritas.includes(m.id)}
-              onFavoritar={onFavoritar}
-            />
-          ))}
-        </div>
-      )}
+      {conteudo}
     </section>
   )
 }
@@ -127,7 +115,7 @@ function Favoritas({ musicas, onFavoritar }) {
           {musicas.map((m) => (
             <li key={m.id}>
               <span>{m.capa} {m.titulo} — {m.artista}</span>
-              <button onClick={() => onFavoritar(m.id)}>Remover</button>
+              <button onClick={() => onFavoritar(m)}>Remover</button>
             </li>
           ))}
         </ul>
@@ -140,51 +128,67 @@ function Rodape() {
   return <footer className="rodape">Projeto de recomendação de músicas · feito com React</footer>
 }
 
-// ------------------------------------------------------------
-// COMPONENTE PRINCIPAL
-// useState guarda valores que mudam. Quando o valor muda, o React
-// redesenha a tela sozinho. Formato: [valor, funcaoParaMudar]
-// ------------------------------------------------------------
 function App() {
   const [texto, setTexto] = useState('')
   const [humor, setHumor] = useState('Todos')
-  const [favoritas, setFavoritas] = useState([]) // lista de ids
+  const [favoritas, setFavoritas] = useState([]) // lista de músicas (objetos)
+  const [resultados, setResultados] = useState([])
+  const [carregando, setCarregando] = useState(false)
+  const [erro, setErro] = useState('')
+  const [jaBuscou, setJaBuscou] = useState(false)
 
-  // Filtra as músicas conforme a busca e o humor.
-  // TODO: aqui você pode chamar sua API de recomendação
-  // (ex.: um backend em Python com Flask/FastAPI usando fetch()).
-  const musicasFiltradas = MUSICAS.filter((m) => {
-    const busca = texto.toLowerCase()
-    const bateTexto =
-      m.titulo.toLowerCase().includes(busca) ||
-      m.artista.toLowerCase().includes(busca) ||
-      m.genero.toLowerCase().includes(busca)
-    const bateHumor = humor === 'Todos' || m.humor === humor
-    return bateTexto && bateHumor
-  })
+  async function aoBuscar() {
+    const frase = texto.trim()
+    if (frase.length < 2) return
 
-  // Adiciona ou remove uma música da lista de favoritas
-  function alternarFavorita(id) {
-    if (favoritas.includes(id)) {
-      setFavoritas(favoritas.filter((f) => f !== id))
-    } else {
-      setFavoritas([...favoritas, id])
+    setCarregando(true)
+    setErro('')
+    try {
+      const dados = await recomendarPorTexto(frase, 30)
+      setResultados(dados.map((m) => ({ ...m, id: `${m.titulo}|${m.artista}` })))
+    } catch {
+      setErro('Não foi possível falar com a API. Ela está rodando?')
+      setResultados([])
+    } finally {
+      setCarregando(false)
+      setJaBuscou(true)
     }
   }
 
-  const musicasFavoritas = MUSICAS.filter((m) => favoritas.includes(m.id))
+  // Os chips de humor filtram o que a API já devolveu
+  const musicasFiltradas = resultados.filter(
+    (m) => humor === 'Todos' || m.humor === humor
+  )
+
+  function alternarFavorita(musica) {
+    if (favoritas.some((f) => f.id === musica.id)) {
+      setFavoritas(favoritas.filter((f) => f.id !== musica.id))
+    } else {
+      setFavoritas([...favoritas, musica])
+    }
+  }
 
   return (
     <>
       <Cabecalho />
       <main>
-        <Busca texto={texto} setTexto={setTexto} humor={humor} setHumor={setHumor} />
+        <Busca
+          texto={texto}
+          setTexto={setTexto}
+          aoBuscar={aoBuscar}
+          carregando={carregando}
+          humor={humor}
+          setHumor={setHumor}
+        />
         <Recomendacoes
           musicas={musicasFiltradas}
-          favoritas={favoritas}
+          idsFavoritas={favoritas.map((f) => f.id)}
           onFavoritar={alternarFavorita}
+          carregando={carregando}
+          erro={erro}
+          jaBuscou={jaBuscou}
         />
-        <Favoritas musicas={musicasFavoritas} onFavoritar={alternarFavorita} />
+        <Favoritas musicas={favoritas} onFavoritar={alternarFavorita} />
       </main>
       <Rodape />
     </>
