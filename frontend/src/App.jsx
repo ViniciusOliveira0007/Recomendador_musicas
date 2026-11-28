@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
-import { recomendarPorTexto } from './api'
+import { recomendarPorTexto, obterCapa } from './api'
 
 const HUMORES = ['Todos', 'Animado', 'Alegre', 'Intenso', 'Calmo']
 
@@ -51,15 +51,54 @@ function Busca({ texto, setTexto, aoBuscar, carregando, humor, setHumor }) {
 }
 
 function CardMusica({ musica, favorita, onFavoritar }) {
+  const [tocando, setTocando] = useState(false)
+  const [imagem, setImagem] = useState(null)
+
+  useEffect(() => {
+    let ativo = true
+    if (musica.spotify_id) {
+      obterCapa(musica.spotify_id)
+        .then((url) => ativo && setImagem(url))
+        .catch(() => {})
+    }
+    return () => { ativo = false }
+  }, [musica.spotify_id])
+
   return (
     <article className="card">
-      <div className="capa">{musica.capa}</div>
+      <div className="capa">
+        {imagem ? <img src={imagem} alt={`Capa de ${musica.titulo}`} /> : musica.capa}
+      </div>
+     
       <h3>{musica.titulo}</h3>
       <p className="artista">{musica.artista}</p>
       <div className="tags">
         <span>{musica.genero}</span>
         <span>{musica.humor}</span>
       </div>
+
+      {musica.spotify_id ? (
+        tocando ? (
+          <iframe
+            className="player"
+            title={`${musica.titulo} no Spotify`}
+            src={`https://open.spotify.com/embed/track/${musica.spotify_id}`}
+            width="100%"
+            height="80"
+            allow="encrypted-media"
+            loading="lazy"
+          />
+        ) : (
+          <button className="ouvir" onClick={() => setTocando(true)}>
+            ▶ Ouvir
+          </button>
+        )
+      ) : (
+        <a className="ouvir" href={musica.link} target="_blank" rel="noreferrer">
+          Abrir no Spotify
+        </a>
+      )}
+
       <button
         className={favorita ? 'favoritar ativo' : 'favoritar'}
         onClick={() => onFavoritar(musica)}

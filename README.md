@@ -198,3 +198,83 @@ Os resultados são coerentes com "alta energia", mas *ainda não foram avaliados
 ## Tecnologias
 
 Python · pandas · NumPy · scikit-learn · sentence-transformers (PyTorch) · kagglehub
+
+
+
+
+## Avaliação
+
+A avaliação é automática e aproximada (ver limitações). Os scripts estão em
+`src/avaliacao.py` e `src/avaliacao_consultas.py`.
+
+### 1. Precisão de gênero@10
+
+Para 200 músicas sorteadas (seed 42), mede a fração das 10 mais parecidas
+que têm o mesmo `playlist_genre` da música de origem.
+
+| Configuração | Peso texto | Peso áudio | Precisão de gênero@10 |
+|---|---|---|---|
+| Só texto (transformer) | 1.0 | 0.0 | 0.961 |
+| Híbrido (config.py) | 0.7 | 0.3 | 0.942 |
+| Só áudio | 0.0 | 1.0 | 0.200 |
+
+Variação do peso do texto (áudio = 1 − texto):
+
+| Peso texto | Peso áudio | Precisão de gênero@10 |
+|---|---|---|
+| 0.0 | 1.0 | 0.200 |
+| 0.25 | 0.75 | 0.825 |
+| 0.5 | 0.5 | 0.912 |
+| 0.75 | 0.25 | 0.947 |
+| 1.0 | 0.0 | 0.961 |
+
+A precisão cresce com o peso do texto. Isso é esperado: a descrição lida pelo
+transformer inclui o gênero, então esta métrica favorece o modo "só texto".
+O modo híbrido perde apenas 0,019 em relação a ele, e foi mantido para que o
+áudio também influencie a semelhança. Essa escolha é uma decisão de projeto,
+não algo comprovado por esta métrica.
+
+### 2. Aderência das consultas em texto livre
+
+Para cada frase, definimos o que se espera das características de áudio
+(ex.: "calm acoustic songs" → `energy` baixa e `acousticness` alta) e medimos
+quantos dos 10 resultados cumprem as condições (`acerto@10`). O `baseline` é
+a fração do dataset inteiro que cumpre as mesmas condições, e o `ganho` é a
+razão entre os dois.
+
+| Consulta | acerto@10 | baseline | ganho | artistas únicos |
+|---|---|---|---|---|
+| energetic dance music | 0.3 | 0.25 | 1.2 | 9 |
+| upbeat summer pop | 0.9 | 0.26 | 3.4 | 10 |
+| aggressive heavy rock | 0.8 | 0.21 | 3.9 | 9 |
+| party hip hop | 0.3 | 0.24 | 1.3 | 7 |
+| happy songs for a road trip | 0.8 | 0.31 | 2.6 | 10 |
+| workout motivation | 0.5 | 0.14 | 3.5 | 10 |
+| calm acoustic songs | 1.0 | 0.20 | 5.1 | 10 |
+| soft piano background | 1.0 | 0.20 | 5.1 | 10 |
+| relaxing study music | 1.0 | 0.23 | 4.4 | 10 |
+| chill lofi beats | 1.0 | 0.33 | 3.1 | 9 |
+| sad slow ballad | 0.8 | 0.22 | 3.6 | 10 |
+
+**Média de acerto@10: 0,76 contra 0,24 do baseline.** O modelo acerta bem
+consultas de clima calmo ou acústico e de intensidade alta (rock), mas tem
+desempenho próximo ao acaso em `energetic dance music` e `party hip hop`.
+
+### Limitações
+
+- **Circularidade:** as descrições do transformer são geradas a partir das
+  mesmas características de áudio usadas na checagem, o que favorece o acerto.
+  Os números servem para comparar configurações, não como medida absoluta.
+- **Limiares arbitrários:** valores como `energy >= 0.7` foram escolhidos
+  pelo grupo, não derivados dos dados.
+- **Sem avaliação humana:** a nota de 1 a 5 por integrante foi planejada
+  (`src/avaliacao_humana.py`), mas não foi aplicada nesta versão.
+- **Consultas em português** perdem precisão, pois as descrições estão em inglês.
+- A busca por frase na API usa só o transformer; o peso de áudio só entra
+  na busca por música.
+
+### Próximos passos
+
+Descrições com percentis do dataset em vez de cortes fixos, comparação com
+outros modelos (`all-mpnet-base-v2`, `multilingual-e5-base`), diversidade de
+artistas (MMR) e avaliação humana.

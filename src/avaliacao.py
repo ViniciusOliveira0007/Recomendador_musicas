@@ -60,16 +60,43 @@ def avaliar(rec, n_amostras=200, k=10):
     return pd.DataFrame(linhas)
 
 
+def varrer_pesos(rec, passos=(0.0, 0.25, 0.5, 0.75, 1.0), n_amostras=200, k=10):
+    """Precisão de gênero variando o peso do texto (áudio = 1 - texto)."""
+    generos = rec.df["playlist_genre"].to_numpy()
+    linhas = []
+    for pt in passos:
+        pa = round(1.0 - pt, 2)
+        p = precisao_de_genero(rec.emb, rec.audio, generos, pt, pa, n_amostras, k)
+        linhas.append({"peso_texto": pt, "peso_audio": pa,
+                       f"precisao_genero@{k}": round(p, 3)})
+    return pd.DataFrame(linhas)
+
+
+def para_markdown(df):
+    """Tabela em Markdown, pronta para colar no README."""
+    cab = "| " + " | ".join(df.columns) + " |"
+    sep = "|" + "|".join(["---"] * len(df.columns)) + "|"
+    corpo = ["| " + " | ".join(str(v) for v in l) + " |"
+             for l in df.itertuples(index=False)]
+    return "\n".join([cab, sep, *corpo])
+
+
 def main():
-    # Import aqui dentro para só carregar o transformer quando for rodar
     from src.recomendador import Recomendador
 
     rec = Recomendador()
-    resultado = avaliar(rec)
-    print(resultado.to_string(index=False))
-
     PROCESSADO_DIR.mkdir(parents=True, exist_ok=True)
-    resultado.to_csv(PROCESSADO_DIR / "avaliacao_genero.csv", index=False)
+
+    comparacao = avaliar(rec)
+    varredura = varrer_pesos(rec)
+
+    print("\n### Comparação dos três modos\n")
+    print(para_markdown(comparacao))
+    print("\n### Variação do peso texto x áudio\n")
+    print(para_markdown(varredura))
+
+    comparacao.to_csv(PROCESSADO_DIR / "avaliacao_genero.csv", index=False)
+    varredura.to_csv(PROCESSADO_DIR / "avaliacao_pesos.csv", index=False)   
 
 
 if __name__ == "__main__":
